@@ -27,9 +27,11 @@ class RiskPredictor:
                 
         # Reorder columns to match training
         df = df[self.feature_names]
+        self.last_df = df
         
         # Preprocess
         X_processed = self.preprocessor.transform(df)
+        self.last_X = X_processed
         return X_processed
 
     def predict_risk(self, transaction_dict):

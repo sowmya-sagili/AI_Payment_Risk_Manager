@@ -31,16 +31,38 @@ class RiskEngine:
         risk_probability: float, 
         risk_score: int, 
         model_name: str = "XGBoost", 
-        model_version: str = "1.0"
+        model_version: str = "1.0",
+        customer_id: str = None,
+        velocity_score: int = None,
+        velocity_level: str = None,
+        velocity_metrics: Any = None,
+        velocity_signals: list[str] = None,
+        graph_score: int = None,
+        graph_risk_level: str = None,
+        cluster_id: str = None,
+        graph_signals: Any = None,
+        final_risk_score: int = None
     ) -> RiskAssessmentResponse:
         
-        risk_level, recommended_action = self.determine_risk_level_and_action(risk_score)
-        risk_factors = self.determine_risk_factors(risk_probability, risk_score)
+        # Determine risk level based on final_risk_score if provided, else ML risk_score
+        score_to_evaluate = final_risk_score if final_risk_score is not None else risk_score
+        risk_level, recommended_action = self.determine_risk_level_and_action(score_to_evaluate)
+        risk_factors = self.determine_risk_factors(risk_probability, score_to_evaluate)
         
         return RiskAssessmentResponse(
             transaction_id=transaction_id,
+            customer_id=customer_id,
             risk_probability=risk_probability,
             risk_score=risk_score,
+            velocity_score=velocity_score,
+            velocity_level=velocity_level,
+            velocity_metrics=velocity_metrics,
+            velocity_signals=velocity_signals,
+            graph_score=graph_score,
+            graph_risk_level=graph_risk_level,
+            cluster_id=cluster_id,
+            graph_signals=graph_signals,
+            final_risk_score=final_risk_score,
             risk_level=risk_level,
             recommended_action=recommended_action,
             model_name=model_name,

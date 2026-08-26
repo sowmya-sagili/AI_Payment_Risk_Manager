@@ -12,3 +12,11 @@ pydantic-settings>=2.0.0
 datasets>=2.14.0
 pytest>=7.0.0
 httpx>=0.24.0
+
+shap
+
+shap
+
+redis
+
+networkx

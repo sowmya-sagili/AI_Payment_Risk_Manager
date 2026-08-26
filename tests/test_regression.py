@@ -53,3 +53,49 @@ def test_integration_analyze_uses_real_model():
     # It should not return exactly 0.5 like the dummy did unless by extreme coincidence
     assert data["risk_probability"] != 0.5, "Probability is exactly 0.5, suspecting DummyClassifier fallback"
     assert data["model_name"] == "XGBoost"
+
+def test_history_endpoint():
+    response = client.get('/api/v1/risk/history')
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    
+    response_limit = client.get('/api/v1/risk/history?limit=1')
+    assert response_limit.status_code == 200
+    data_limit = response_limit.json()
+    assert isinstance(data_limit, list)
+    assert len(data_limit) <= 1
+
+def test_analytics_endpoint():
+    response = client.get('/api/v1/risk/analytics')
+    assert response.status_code == 200
+    data = response.json()
+    assert 'total_transactions' in data
+    assert 'average_amount' in data
+
+import json
+def test_demo_transactions():
+    health = client.get('/api/v1/risk/health')
+    if health.status_code == 503:
+        pytest.skip('Model not loaded')
+        
+    with open('demo_transactions.json', 'r') as f:
+        demo_txs = json.load(f)
+        
+    for expected_level, tx in demo_txs.items():
+        for i in range(1, 29):
+            assert f'V{i}' in tx, f'V{i} missing in {expected_level} demo transaction'
+            
+        payload = dict(tx)
+        payload['transaction_id'] = f'TX-TEST-{expected_level}'
+        if 'Time' not in payload:
+            payload['Time'] = 0.0
+        
+        res = client.post('/api/v1/risk/analyze', json=payload)
+        assert res.status_code == 200
+        data = res.json()
+        
+        prob = data['risk_probability']
+        assert 0.0 <= prob <= 1.0
+        
+        assert data['risk_level'] == expected_level, f"Expected {expected_level}, got {data['risk_level']} with prob {prob}"
