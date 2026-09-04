@@ -95,9 +95,12 @@ python run.py
 ## Testing
 Run the complete automated test suite:
 ```bash
-pytest
+
+.\venv\Scripts\Activate.ps1
+ $env:PYTHONPATH = (Get-Location).Path
+ python -m pytest -q
 ```
-*Result: 19 passed.*
+*Result: 53 passed.*
 
 ## Limitations
 * Dataset relies on anonymized PCA features, preventing rich behavioral explanations.
