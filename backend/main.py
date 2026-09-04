@@ -1,3 +1,35 @@
+# Terminal 1 — Backend (FastAPI)
+# cd D:\Razorpay\ai-payment-risk-manager
+# .\venv\Scripts\Activate.ps1
+# python -m uvicorn backend.main:app --reload --port 8000
+
+# Backend:
+
+# API → http://localhost:8000
+# Swagger → http://localhost:8000/docs
+# Health → http://localhost:8000/api/v1/risk/health
+# Terminal 2 — Frontend (Streamlit)
+
+# Open a NEW PowerShell terminal, then:
+# Frontend
+
+# cd D:\Razorpay\ai-payment-risk-manager
+# .\venv\Scripts\Activate.ps1
+# python -m streamlit run frontend/app.py --server.port 8501
+
+# Frontend:
+
+# http://localhost:8501
+# 🧪 Optional — Run all tests
+# cd D:\Razorpay\ai-payment-risk-manager
+# .\venv\Scripts\Activate.ps1
+# $env:PYTHONPATH = (Get-Location).Path
+# python -m pytest -q
+
+# Expected:
+
+# 53 passed
+
 from fastapi import FastAPI, HTTPException
 import os
 import sys

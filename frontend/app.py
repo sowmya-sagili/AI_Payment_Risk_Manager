@@ -175,7 +175,7 @@ def render_analysis_tab(backend_online, model_ready):
             v5 = st.number_input("V5", value=float(demo_tx.get("V5", -0.338)), key=f"v5_{fk}")
             v14 = st.number_input("V14", value=float(demo_tx.get("V14", -0.287)), key=f"v14_{fk}")
             
-            submit = st.form_submit_button("Analyze Transaction", use_container_width=True)
+        submit = st.form_submit_button("Analyze Transaction", type="primary", use_container_width=True)
             
         if submit:
             # Start with the demo tx as a base to preserve all 28 features
@@ -196,6 +196,7 @@ def render_analysis_tab(backend_online, model_ready):
             st.session_state['last_payload'] = payload
             st.session_state['last_result'] = None
             st.session_state['investigation_result'] = None
+            st.session_state['explanation_result'] = None
             
             with st.spinner("Analyzing transaction..."):
                 try:
@@ -207,7 +208,44 @@ def render_analysis_tab(backend_online, model_ready):
                 except requests.exceptions.RequestException:
                     st.error("Failed to connect to the backend API.")
                     
+    # Display results if available
+    if st.session_state.get('last_result'):
+        display_risk_result(st.session_state['last_result'])
+        
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("Investigate Risk", type="primary", use_container_width=True):
+                with st.spinner("Generating AI Investigation Report..."):
+                    try:
+                        res = requests.post(f"{API_BASE_URL}/investigate", json=st.session_state['last_payload'])
+                        if res.status_code == 200:
+                            st.session_state['investigation_result'] = res.json()
+                        else:
+                            st.error("Failed to generate investigation report.")
+                    except requests.exceptions.RequestException:
+                        st.error("Failed to connect to the backend API.")
+        
+        with col_btn2:
+            if st.button("Explain Risk", use_container_width=True):
+                with st.spinner("Calculating SHAP explanations..."):
+                    try:
+                        res = requests.post(f"{API_BASE_URL}/explain", json=st.session_state['last_payload'])
+                        if res.status_code == 200:
+                            st.session_state['explanation_result'] = res.json()
+                        else:
+                            st.error("Failed to generate explanation.")
+                    except requests.exceptions.RequestException:
+                        st.error("Failed to connect to the backend API.")
+                        
+    # Display Explanation if available
+    if st.session_state.get('explanation_result'):
+        display_explanation(st.session_state['explanation_result'])
+                    
+    # Display Investigation if available
+    if st.session_state.get('investigation_result'):
+        display_investigation(st.session_state['investigation_result'])
 
+    st.markdown("---")
     st.markdown("### Velocity Attack Simulation")
     st.caption("Simulates a sequence of rapidly escalating transactions to demonstrate the Velocity Engine.")
     if st.button("Run Velocity Attack Simulation"):
@@ -254,44 +292,6 @@ def render_analysis_tab(backend_online, model_ready):
             st.session_state['last_payload'] = sim_payload
             st.session_state['last_result'] = last_sim_res
             st.rerun()
-            
-    # Display results if available
-
-    if st.session_state.get('last_result'):
-        display_risk_result(st.session_state['last_result'])
-        
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.button("Investigate Risk", type="primary", use_container_width=True):
-                with st.spinner("Generating AI Investigation Report..."):
-                    try:
-                        res = requests.post(f"{API_BASE_URL}/investigate", json=st.session_state['last_payload'])
-                        if res.status_code == 200:
-                            st.session_state['investigation_result'] = res.json()
-                        else:
-                            st.error("Failed to generate investigation report.")
-                    except requests.exceptions.RequestException:
-                        st.error("Failed to connect to the backend API.")
-        
-        with col_btn2:
-            if st.button("Explain Risk", use_container_width=True):
-                with st.spinner("Calculating SHAP explanations..."):
-                    try:
-                        res = requests.post(f"{API_BASE_URL}/explain", json=st.session_state['last_payload'])
-                        if res.status_code == 200:
-                            st.session_state['explanation_result'] = res.json()
-                        else:
-                            st.error("Failed to generate explanation.")
-                    except requests.exceptions.RequestException:
-                        st.error("Failed to connect to the backend API.")
-                        
-    # Display Explanation if available
-    if st.session_state.get('explanation_result'):
-        display_explanation(st.session_state['explanation_result'])
-                    
-    # Display Investigation if available
-    if st.session_state.get('investigation_result'):
-        display_investigation(st.session_state['investigation_result'])
 
 
 def display_explanation(explanation):
@@ -402,7 +402,7 @@ def display_investigation(report):
 
 def display_risk_result(result):
     st.markdown("---")
-    st.subheader(f"Risk Assessment: {result['transaction_id']}")
+    st.subheader(f"Risk Assessment: {result.get('transaction_id', 'UNKNOWN')}")
     
     color_map = {"LOW": "green", "MEDIUM": "orange", "HIGH": "red", "UNKNOWN": "gray", None: "gray"}
     
@@ -413,8 +413,10 @@ def display_risk_result(result):
     st.markdown("### MODEL RISK")
     st.markdown("### --------------------------------")
     
-    m_prob = result.get('risk_probability', 0.0)
-    m_score = result.get('risk_score', 0)
+    m_prob = result.get('risk_probability')
+    m_prob = float(m_prob) if m_prob is not None else 0.0
+    m_score = result.get('risk_score')
+    m_score = int(m_score) if m_score is not None else 0
     
     col1, col2 = st.columns(2)
     with col1:
@@ -440,7 +442,7 @@ def display_risk_result(result):
         with c2:
             st.markdown(f"**Velocity Level:** <span style='color:{v_color};'>{v_level}</span>", unsafe_allow_html=True)
             
-        v_mets = result.get('velocity_metrics', {})
+        v_mets = result.get('velocity_metrics') or {}
         if v_mets:
             st.markdown("**Transactions:**")
             st.markdown(f"- 1 min: {v_mets.get('transactions_1m', 0)}")
@@ -477,10 +479,10 @@ def display_risk_result(result):
         if result.get('cluster_id'):
             st.markdown(f"**Cluster ID:** {result.get('cluster_id')}")
             
-        g_sigs = result.get('graph_signals', [])
+        g_sigs = result.get('graph_signals') or []
         if g_sigs:
             for sig in g_sigs:
-                st.markdown(f"- ?? **{sig['type']}** [{sig['severity']}]: {sig['description']}")
+                st.markdown(f"- ⚠️ **{sig.get('type', 'SIGNAL')}** [{sig.get('severity', 'INFO')}]: {sig.get('description', '')}")
     else:
         st.write("Graph Engine Unavailable or Disabled.")
         
@@ -492,9 +494,11 @@ def display_risk_result(result):
     st.markdown("### --------------------------------")
     
     f_score = result.get('final_risk_score')
-    if f_score is None: f_score = m_score
-    f_level = result.get('risk_level')
-    f_action = result.get('recommended_action')
+    if f_score is None: 
+        f_score = m_score
+    f_score = int(f_score)
+    f_level = result.get('risk_level', 'UNKNOWN')
+    f_action = result.get('recommended_action', 'REVIEW')
     f_color = color_map.get(f_level, "gray")
     
     col_f1, col_f2, col_f3 = st.columns(3)
@@ -514,15 +518,18 @@ def display_risk_result(result):
     st.markdown(f"**Decision Mode:** {mode}")
     st.markdown(f"**Reason:** {result.get('decision_reason', '')}")
     
-    rules = result.get('triggered_rules', [])
+    rules = result.get('triggered_rules') or []
     if rules:
         st.markdown("**Triggered Rules:**")
         for r in rules:
             st.markdown(f"- {r.get('rule_id')}: {r.get('reason')}")
             
-    w_ml = result.get('ml_weight', 0.5)
-    w_vel = result.get('velocity_weight', 0.25)
-    w_gr = result.get('graph_weight', 0.25)
+    w_ml = result.get('ml_weight')
+    w_ml = float(w_ml) if w_ml is not None else 0.5
+    w_vel = result.get('velocity_weight')
+    w_vel = float(w_vel) if w_vel is not None else 0.25
+    w_gr = result.get('graph_weight')
+    w_gr = float(w_gr) if w_gr is not None else 0.25
     st.caption(f"Weights Used - ML: {w_ml:.0%} | Velocity: {w_vel:.0%} | Graph: {w_gr:.0%}")
     st.markdown("### --------------------------------")
 
@@ -551,7 +558,7 @@ def display_risk_result(result):
     st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("### Risk Factors Identified")
-    factors = result.get("risk_factors", [])
+    factors = result.get("risk_factors") or []
     if factors:
         for factor in factors:
             st.markdown(f"- {factor}")
@@ -664,58 +671,14 @@ def render_history_tab():
     st.dataframe(df.style.map(highlight_risk, subset=['risk_level']), use_container_width=True)
 
 
-def inject_custom_css():
-    st.markdown("""
-        <style>
-        /* Make sidebar dark */
-        [data-testid="stSidebar"] {
-            background-color: #0e1117 !important;
-        }
-        [data-testid="stSidebar"] > div:first-child {
-            background-color: #0e1117 !important;
-        }
-        /* Ensure text in sidebar is readable */
-        [data-testid="stSidebar"] * {
-            color: #fafafa;
-        }
-        /* Except for inputs which need their own styling */
-        [data-testid="stSidebar"] input {
-            color: #ffffff;
-            background-color: #262730;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-def main():
-    inject_custom_css()
-    st.title("AI Payment Risk Manager")
+def render_graph_tab(backend_online=True):
+    st.header("Fraud Network")
+    st.write("Visualizes relationships between customers, devices, IP addresses, payment accounts, and transactions to identify possible fraud rings.")
     
-    backend_online, model_ready = check_backend_health()
-    eval_data = load_evaluation_metrics()
-    
-    render_sidebar(backend_online, model_ready, eval_data)
-    
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Analysis", "Analytics", "Model Performance", "History", "Fraud Network", "Decision Simulator"])
-    
-    with tab1:
-        render_analysis_tab(backend_online, model_ready)
-    
-    with tab2:
-        render_analytics_tab()
+    if not backend_online:
+        st.warning("Fraud Network data unavailable. Please make sure the backend is running.")
+        return
         
-    with tab3:
-        render_model_performance_tab(eval_data)
-        
-    with tab4:
-        render_history_tab()
-
-if __name__ == "__main__":
-    main()
-
-def render_graph_tab():
-    st.header("Fraud Network Intelligence")
-    st.write("Explore connected components and detect fraud rings.")
-    
     col1, col2 = st.columns(2)
     with col1:
         cust_search = st.text_input("Investigate Customer ID", value="CUST-DEMO")
@@ -726,6 +689,8 @@ def render_graph_tab():
                     if res.status_code == 200:
                         data = res.json()
                         st.session_state['graph_data'] = data
+                    elif res.status_code == 503:
+                        st.warning("Graph engine is disabled in backend configuration.")
                     else:
                         st.error("Graph engine returned an error.")
                 except Exception as e:
@@ -764,7 +729,7 @@ def render_graph_tab():
                     res = requests.post(f"{API_BASE_URL}/analyze", json=payload)
                     if res.status_code == 200:
                         last_res = res.json()
-                        st.write(f"? TX from {cust}. Graph Score: {last_res.get('graph_score')} ({last_res.get('graph_risk_level')})")
+                        st.write(f"Processed TX from {cust}. Graph Score: {last_res.get('graph_score')} ({last_res.get('graph_risk_level')})")
                 except Exception:
                     st.error("API error")
                 progress.progress((idx + 1) / len(sim_custs))
@@ -855,6 +820,12 @@ def render_graph_tab():
                             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
                             )
             st.plotly_chart(fig, use_container_width=True)
+        elif nodes:
+            st.info(f"Entity node found ({len(nodes)} entity), but no shared relationships or connected fraud rings detected yet.")
+        else:
+            st.info("No entity relationships found for this customer.")
+    else:
+        st.info("No active graph network loaded. Enter a Customer ID above and click 'Investigate Network' or run a 'Fraud Ring Simulation' to visualize the entity graph.")
 
 def render_decision_simulator():
     st.header("Decision Simulator")
@@ -910,4 +881,58 @@ def render_decision_simulator():
                     st.error(f"{r['rule_id']} - {r['reason']}")
                     
             st.markdown(f"**Calculated Weights:** ML={w_ml:.2f}, Vel={w_vel:.2f}, Graph={w_grph:.2f}")
+
+def inject_custom_css():
+    st.markdown("""
+        <style>
+        /* Make sidebar dark */
+        [data-testid="stSidebar"] {
+            background-color: #0e1117 !important;
+        }
+        [data-testid="stSidebar"] > div:first-child {
+            background-color: #0e1117 !important;
+        }
+        /* Ensure text in sidebar is readable */
+        [data-testid="stSidebar"] * {
+            color: #fafafa;
+        }
+        /* Except for inputs which need their own styling */
+        [data-testid="stSidebar"] input {
+            color: #ffffff;
+            background-color: #262730;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+def main():
+    inject_custom_css()
+    st.title("AI Payment Risk Manager")
+    
+    backend_online, model_ready = check_backend_health()
+    eval_data = load_evaluation_metrics()
+    
+    render_sidebar(backend_online, model_ready, eval_data)
+    
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Analysis", "Analytics", "Model Performance", "History", "Fraud Network", "Decision Simulator"])
+    
+    with tab1:
+        render_analysis_tab(backend_online, model_ready)
+    
+    with tab2:
+        render_analytics_tab()
+        
+    with tab3:
+        render_model_performance_tab(eval_data)
+        
+    with tab4:
+        render_history_tab()
+
+    with tab5:
+        render_graph_tab(backend_online)
+
+    with tab6:
+        render_decision_simulator()
+
+if __name__ == "__main__":
+    main()
 
